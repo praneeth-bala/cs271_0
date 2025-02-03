@@ -16,6 +16,10 @@ impl BalanceTable {
         }
     }
 
+    pub fn get_balance(&self, client: u64) -> i64 {
+        *self.balances.get(&client).unwrap()
+    }
+
     pub fn print_table(&self) {
         println!("Balance Table:");
         for (client, balance) in &self.balances {

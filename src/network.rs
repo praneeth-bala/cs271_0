@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::Sender;
-use std::thread;
+use std::{thread, time};
 use serde::{Serialize, Deserialize};
 
 use crate::blockchain::Block;
@@ -71,6 +71,8 @@ impl Network {
     }
 
     pub fn send_message(&mut self, client_id: u64, message: Message) {
+        let three_secs = time::Duration::from_millis(3000);
+        thread::sleep(three_secs);
         if let Some(stream) = self.peers.get_mut(&client_id) {
             let serialized_message = serde_json::to_string(&message).unwrap();
             stream.write(serialized_message.as_bytes()).unwrap();

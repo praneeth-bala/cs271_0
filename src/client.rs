@@ -94,6 +94,7 @@ impl Client {
             }
             resource.balance_table.balances.insert(client_id, 10);
         }
+        resource.balance_table.balances.insert(self.client_id, 10);
         let total = resource.network.peers.len();
         println!(
             "{total} Connected clients",
@@ -150,6 +151,14 @@ impl Client {
             let mut resources_lock = self.resources.lock();
             let resource = resources_lock.as_deref_mut().unwrap();
 
+            if resource.balance_table.get_balance(self.client_id) < amt {
+                println!("FAILED: Insufficient Balance");
+                continue;
+            } else {
+                print!("Old balance:");
+                resource.balance_table.print_table();
+            }
+
             resource.lamport_queue.increment();
             resource.lamport_queue.insert(resource.lamport_queue.get_clock(), self.client_id);
             resource.blockchain.ready_block(self.client_id, recipient_id, amt);
@@ -183,40 +192,42 @@ fn handle_incoming_events(
                         client_id,
                         lamport_clock,
                     } => {
+                        println!("Adding request to queue: {:?}", message);
                         resource.lamport_queue.insert(lamport_clock, client_id);
                         resource.lamport_queue.update(lamport_clock);
                         resource.network.send_message(client_id, Message::Reply { client_id: (my_client_id), lamport_clock: (resource.lamport_queue.get_clock()) });
-                        println!("Added request to queue: {:?}", message);
                     }
                     Message::Release {
                         client_id: _,
                         lamport_clock,
                         block,
                     } => {
+                        println!("Processing release and adding block: {:?}", block);
                         resource.lamport_queue.pop();
                         resource.lamport_queue.update(lamport_clock);
                         resource.blockchain.add_block(block.clone());
                         resource.balance_table.update_balance(block.from, -block.amt);
                         resource.balance_table.update_balance(block.to, block.amt);
-                        println!("Processed release and added block: {:?}", block);
                     }
                     Message::Reply {
                         client_id,
                         lamport_clock,
                     } => {
+                        println!("Received reply from: {}", client_id);
                         resource.lamport_queue.update(lamport_clock);
                         reply_count += 1;
-                        println!("Received reply from: {}", client_id);
                     }
                 }
 
                 if (resource.network.peers.len()==reply_count) && ((!resource.lamport_queue.peek().is_none()) && resource.lamport_queue.peek().unwrap().client_id==my_client_id) {
                     let block = resource.blockchain.create_block();
+                    println!("SUCCESS: Received all replies, adding block: {:?}", block);
                     resource.balance_table.update_balance(block.from, -block.amt);
                     resource.balance_table.update_balance(block.to, block.amt);
                     resource.lamport_queue.increment();
                     resource.lamport_queue.pop();
-                    println!("Received all replies, added block: {:?}", block);
+                    print!("New balance:");
+                    resource.balance_table.print_table();
                     for i in 0..reply_count+1 {
                         if i as u64 == my_client_id {
                             continue;

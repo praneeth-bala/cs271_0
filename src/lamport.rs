@@ -42,10 +42,12 @@ impl LamportQueue {
 
     pub fn increment(&mut self) {
         self.clock += 1;
+        println!("Clock updated to: {}", self.clock)
     }
 
     pub fn update(&mut self, other_clock: u64) {
         self.clock = self.clock.max(other_clock) + 1;
+        println!("Clock updated to: {}", self.clock)
     }
 
     pub fn get_clock(&self) -> u64 {
