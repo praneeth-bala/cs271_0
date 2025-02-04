@@ -8,7 +8,7 @@ pub struct LamportEntry {
 
 impl Ord for LamportEntry {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (self.lamport_clock, self.client_id).cmp(&(other.lamport_clock, other.client_id))
+        (other.lamport_clock, other.client_id).cmp(&(self.lamport_clock, self.client_id))
     }
 }
 
