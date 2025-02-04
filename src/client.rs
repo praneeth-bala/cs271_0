@@ -1,8 +1,9 @@
 use crate::balance_table::BalanceTable;
-use crate::blockchain::Blockchain;
+use crate::blockchain::{Block, Blockchain};
 use crate::lamport::LamportQueue;
 use crate::network::{Message, Network};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::u64;
 use std::{
     io::{self, Write},
     sync::{Arc, Mutex},
@@ -151,13 +152,8 @@ impl Client {
             let mut resources_lock = self.resources.lock();
             let resource = resources_lock.as_deref_mut().unwrap();
 
-            if resource.balance_table.get_balance(self.client_id) < amt {
-                println!("FAILED: Insufficient Balance");
-                continue;
-            } else {
-                print!("Old balance:");
-                resource.balance_table.print_table();
-            }
+            print!("Old balance:");
+            resource.balance_table.print_table();
 
             resource.lamport_queue.increment();
             resource.lamport_queue.insert(resource.lamport_queue.get_clock(), self.client_id);
@@ -202,12 +198,16 @@ fn handle_incoming_events(
                         lamport_clock,
                         block,
                     } => {
-                        println!("Processing release and adding block: {:?}", block);
+                        if block.amt == -1 {
+                            println!("Processing release");
+                        } else {
+                            println!("Processing release and adding block: {:?}", block);
+                            resource.blockchain.add_block(block.clone());
+                            resource.balance_table.update_balance(block.from, -block.amt);
+                            resource.balance_table.update_balance(block.to, block.amt);
+                        }
                         resource.lamport_queue.pop();
                         resource.lamport_queue.update(lamport_clock);
-                        resource.blockchain.add_block(block.clone());
-                        resource.balance_table.update_balance(block.from, -block.amt);
-                        resource.balance_table.update_balance(block.to, block.amt);
                     }
                     Message::Reply {
                         client_id,
@@ -220,10 +220,15 @@ fn handle_incoming_events(
                 }
 
                 if (resource.network.peers.len()==reply_count) && ((!resource.lamport_queue.peek().is_none()) && resource.lamport_queue.peek().unwrap().client_id==my_client_id) {
-                    let block = resource.blockchain.create_block();
-                    println!("SUCCESS: Received all replies, adding block: {:?}", block);
-                    resource.balance_table.update_balance(block.from, -block.amt);
-                    resource.balance_table.update_balance(block.to, block.amt);
+                    let mut block = Block { from: u64::MAX, to: u64::MAX, amt: -1, hash_pointer: "".to_string() };
+                    if resource.balance_table.get_balance(resource.blockchain.next_block.from) - resource.blockchain.next_block.amt < 0 {
+                        println!("FAILED: Insufficent balance")
+                    } else {
+                        block = resource.blockchain.create_block();
+                        println!("SUCCESS: Received all replies, adding block: {:?}", block);
+                        resource.balance_table.update_balance(block.from, -block.amt);
+                        resource.balance_table.update_balance(block.to, block.amt);
+                    }
                     resource.lamport_queue.increment();
                     resource.lamport_queue.pop();
                     print!("New balance:");
